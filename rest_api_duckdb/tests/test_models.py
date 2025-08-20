@@ -66,9 +66,13 @@ class TestQueryPayload:
         assert any("fromDate must be less than or equal to toDate" in str(error) for error in errors)
 
     def test_missing_required_fields(self):
-        """Test validation error with missing required fields."""
-        with pytest.raises(ValidationError):
-            QueryPayload()
+        """Test that all fields are now optional."""
+        # This should now succeed since all fields are optional
+        payload = QueryPayload()
+        assert payload.id is None
+        assert payload.fromDate is None
+        assert payload.toDate is None
+        assert payload.environment is None
 
     def test_empty_string_dates(self):
         """Test validation error with empty string dates."""
@@ -91,6 +95,15 @@ class TestQueryPayload:
         
         assert from_date == date(2024, 1, 15)
         assert to_date == date(2024, 12, 31)
+
+    def test_get_parsed_dates_with_nulls(self):
+        """Test the get_parsed_dates method with null dates."""
+        payload = QueryPayload(id="12345")  # No dates provided
+        
+        from_date, to_date = payload.get_parsed_dates()
+        
+        assert from_date is None
+        assert to_date is None
 
     def test_leap_year_date(self):
         """Test with leap year date."""

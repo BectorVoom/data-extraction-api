@@ -199,3 +199,68 @@ class TestDatabaseService:
         
         # Should work without error
         assert isinstance(results, list)
+
+    def test_parquet_integration(self):
+        """Test Parquet file creation and loading."""
+        import tempfile
+        import os
+        from app.services.database import DatabaseService
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parquet_file = os.path.join(temp_dir, "test_events.parquet")
+            
+            # Create a new database service
+            db_service = DatabaseService(":memory:")
+            
+            # Create sample Parquet file
+            created_file = db_service.create_sample_parquet_file(parquet_file)
+            assert os.path.exists(created_file)
+            assert created_file == parquet_file
+            
+            # Initialize database from Parquet file
+            db_service.initialize_from_parquet(parquet_file)
+            
+            # Test that data was loaded correctly
+            table_info = db_service.get_table_info()
+            assert table_info["row_count"] > 0
+            assert len(table_info["unique_ids"]) > 0
+            
+            # Test querying the loaded data
+            results = db_service.query_events("12345", None, None)
+            assert len(results) > 0
+            assert results[0]["id"] == "12345"
+            
+            # Test environment filtering
+            prod_results = db_service.query_events(None, None, None, "production")
+            assert len(prod_results) > 0
+            for result in prod_results:
+                assert result["environment"] == "production"
+
+    def test_parquet_export(self):
+        """Test exporting data to Parquet file."""
+        import tempfile
+        import os
+        from app.services.database import DatabaseService
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_file = os.path.join(temp_dir, "export_events.parquet")
+            
+            # Create and initialize database service
+            db_service = DatabaseService(":memory:")
+            db_service.initialize_sample_data()
+            
+            # Export to Parquet
+            exported_file = db_service.export_to_parquet(export_file)
+            assert os.path.exists(exported_file)
+            assert exported_file == export_file
+            
+            # Create another database and load the exported file
+            db_service2 = DatabaseService(":memory:")
+            db_service2.initialize_from_parquet(exported_file)
+            
+            # Verify data consistency
+            original_info = db_service.get_table_info()
+            loaded_info = db_service2.get_table_info()
+            
+            assert original_info["row_count"] == loaded_info["row_count"]
+            assert set(original_info["unique_ids"]) == set(loaded_info["unique_ids"])
