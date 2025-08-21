@@ -272,11 +272,11 @@
         const tableData = [headers, ...dataRows];
         
         // Clear existing content and add new data
-        const range = worksheet.getRange('A1').getResizedRange(tableData.length - 1, headers.length);
+        const range = worksheet.getRange('A1').getResizedRange(tableData.length - 1, headers.length - 1);
         range.values = tableData;
         
         // Format the header row
-        const headerRange = worksheet.getRange('A1').getResizedRange(0, headers.length);
+        const headerRange = worksheet.getRange('A1').getResizedRange(0, headers.length - 1);
         headerRange.format.font.bold = true;
         headerRange.format.fill.color = '#4472C4';
         headerRange.format.font.color = 'white';
@@ -294,10 +294,22 @@
       
     } catch (error) {
       const errorMessage_ = error instanceof Error ? error.message : String(error);
-      errorMessage = `Failed to update Excel sheet: ${errorMessage_}`;
+      
+      // Provide more specific error messages for common Excel issues
+      let userErrorMessage = `Failed to update Excel sheet: ${errorMessage_}`;
+      if (errorMessage_.includes('InvalidBinding') || errorMessage_.includes('dimension')) {
+        userErrorMessage = 'Failed to update Excel sheet: Data size mismatch. Please try with fewer columns or rows.';
+      } else if (errorMessage_.includes('InvalidOperation')) {
+        userErrorMessage = 'Failed to update Excel sheet: Invalid operation. Please ensure you have an active worksheet.';
+      } else if (errorMessage_.includes('AccessDenied')) {
+        userErrorMessage = 'Failed to update Excel sheet: Access denied. Please check worksheet permissions.';
+      }
+      
+      errorMessage = userErrorMessage;
       
       reportExcelError('update_sheet', error, {
         dataRowCount: dataToExport?.length || 0,
+        columnCount: dataToExport?.length > 0 ? Object.keys(dataToExport[0]).length : 0,
         formatUsed: useFeatherFormat ? 'feather' : 'json',
         officeAvailable: typeof (globalThis as any).Office !== 'undefined',
         excelAvailable: typeof (globalThis as any).Excel !== 'undefined'
