@@ -11,7 +11,7 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import asyncio
 import os
 
@@ -86,7 +86,8 @@ class ErrorPayload(BaseModel):
     formData: Optional[Dict[str, Any]] = Field(None, description="Form data for validation errors")
     requestContext: Optional[Dict[str, Any]] = Field(None, description="Request context for API errors")
 
-    @validator('message')
+    @field_validator('message')
+    @classmethod
     def sanitize_message(cls, v):
         """Sanitize error message to remove potential PII"""
         if not v:
@@ -103,7 +104,8 @@ class ErrorPayload(BaseModel):
         
         return v
 
-    @validator('stack')
+    @field_validator('stack')
+    @classmethod
     def sanitize_stack(cls, v):
         """Sanitize stack trace"""
         if not v:

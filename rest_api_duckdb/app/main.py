@@ -1,9 +1,12 @@
 import logging
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
 from app.api.query import router as query_router
@@ -16,6 +19,70 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log detailed request/response information for debugging."""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Capture request details
+        request_body = b""
+        if request.method in ["POST", "PUT", "PATCH"]:
+            request_body = await request.body()
+            # Reset request body stream for FastAPI to read
+            request._body = request_body
+        
+        request_info = {
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers),
+            "client_ip": request.client.host if request.client else "unknown",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Safely capture request body
+        try:
+            if request_body:
+                body_str = request_body.decode('utf-8')
+                # Try to parse as JSON for structured logging
+                try:
+                    request_info["body"] = json.loads(body_str)
+                except json.JSONDecodeError:
+                    request_info["body"] = body_str[:1000]  # Truncate large non-JSON bodies
+            else:
+                request_info["body"] = None
+        except Exception as e:
+            logger.warning(f"Failed to capture request body: {e}")
+            request_info["body"] = "[CAPTURE_FAILED]"
+        
+        # Sanitize sensitive headers
+        sensitive_headers = ["authorization", "cookie", "x-api-key"]
+        for header in sensitive_headers:
+            if header in request_info["headers"]:
+                request_info["headers"][header] = "[REDACTED]"
+        
+        # Process request
+        start_time = datetime.now()
+        response = await call_next(request)
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        # Log details for 4xx/5xx responses or enable debug logging for all
+        if response.status_code >= 400 or logger.isEnabledFor(logging.DEBUG):
+            log_entry = {
+                "request": request_info,
+                "response": {
+                    "status_code": response.status_code,
+                    "headers": dict(response.headers),
+                    "processing_time_seconds": processing_time
+                }
+            }
+            
+            if response.status_code >= 400:
+                logger.error(f"HTTP {response.status_code} response: {log_entry}")
+            else:
+                logger.debug(f"Request processed: {log_entry}")
+        
+        return response
 
 
 @asynccontextmanager
@@ -34,6 +101,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Add request/response logging middleware
+app.add_middleware(RequestResponseLoggingMiddleware)
 
 # Configure CORS
 import os
@@ -70,6 +140,88 @@ async def add_security_headers(request, call_next):
 # Include routers
 app.include_router(query_router)
 app.include_router(error_logging_router)
+
+
+# Validation error handler
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Enhanced validation error handler with detailed logging."""
+    import uuid
+    
+    # Generate unique error ID for tracking
+    error_id = str(uuid.uuid4())
+    
+    # Capture request body for validation error analysis
+    request_body = None
+    try:
+        if hasattr(request, '_body'):
+            body_bytes = request._body
+        else:
+            body_bytes = await request.body()
+        
+        if body_bytes:
+            body_str = body_bytes.decode('utf-8')
+            try:
+                request_body = json.loads(body_str)
+            except json.JSONDecodeError:
+                request_body = body_str[:500]  # Truncate for logging
+    except Exception as e:
+        logger.warning(f"Failed to capture request body for validation error: {e}")
+        request_body = "[CAPTURE_FAILED]"
+    
+    # Collect detailed validation error information
+    validation_errors = []
+    for error in exc.errors():
+        validation_errors.append({
+            "field": " -> ".join(str(x) for x in error["loc"]),
+            "message": error["msg"],
+            "type": error["type"],
+            "input_value": error.get("input")
+        })
+    
+    # Create structured error log
+    error_log = {
+        "error_id": error_id,
+        "timestamp": datetime.now().isoformat(),
+        "error_type": "validation_error",
+        "request_info": {
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers),
+            "client_ip": request.client.host if request.client else "unknown",
+            "body": request_body
+        },
+        "validation_errors": validation_errors,
+        "error_count": len(validation_errors)
+    }
+    
+    # Sanitize sensitive headers in log
+    sensitive_headers = ["authorization", "cookie", "x-api-key"]
+    for header in sensitive_headers:
+        if header in error_log["request_info"]["headers"]:
+            error_log["request_info"]["headers"][header] = "[REDACTED]"
+    
+    # Log the detailed validation error
+    logger.error(f"Request validation failed: {error_log}")
+    
+    # Return detailed validation error response
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Request validation failed",
+            "details": "The request contains invalid or missing data",
+            "validation_errors": [
+                {
+                    "field": err["field"],
+                    "message": err["message"],
+                    "type": err["type"]
+                }
+                for err in validation_errors
+            ],
+            "error_id": error_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    )
 
 
 # Root endpoint

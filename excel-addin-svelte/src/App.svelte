@@ -206,10 +206,10 @@
         data: rows,
         count: rows.length,
         query_info: {
-          id: payload.id?.toString() || null,
-          fromDate: payload.fromDate || null,
-          toDate: payload.toDate || null,
-          environment: payload.environment || null,
+          id: payload!.id?.toString() || null,
+          fromDate: payload!.fromDate || null,
+          toDate: payload!.toDate || null,
+          environment: payload!.environment || null,
           format: 'feather'
         }
       };

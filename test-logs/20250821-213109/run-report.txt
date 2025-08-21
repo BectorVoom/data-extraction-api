@@ -1,0 +1,2 @@
+[2025-08-21 21:31:09] ℹ️  INFO: 🧪 PHASE 1: Running internal unit and integration tests
+[2025-08-21 21:31:09] ℹ️  INFO: This ensures all TestClient-based tests pass before starting HTTP server

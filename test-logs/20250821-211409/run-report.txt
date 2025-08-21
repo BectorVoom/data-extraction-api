@@ -1,0 +1,19 @@
+[2025-08-21 21:14:09] INFO: Starting backend server...
+[2025-08-21 21:14:09] INFO: Backend started with PID: 24576
+[2025-08-21 21:14:09] INFO: Waiting for server to start...
+[2025-08-21 21:14:14] INFO: Server is ready, starting tests...
+[2025-08-21 21:14:14] INFO: Testing: root endpoint
+[2025-08-21 21:14:14] INFO: Making GET request to http://localhost:8000/
+[2025-08-21 21:14:14] INFO: root endpoint SUCCESS (HTTP 200)
+[2025-08-21 21:14:14] INFO: Testing: health endpoint
+[2025-08-21 21:14:14] INFO: Making GET request to http://localhost:8000/api/health
+[2025-08-21 21:14:14] INFO: health endpoint SUCCESS (HTTP 200)
+[2025-08-21 21:14:14] INFO: Testing: valid query with all fields
+[2025-08-21 21:14:14] INFO: Making POST request to http://localhost:8000/api/query
+[2025-08-21 21:14:14] INFO: valid query with all fields SUCCESS (HTTP 200)
+[2025-08-21 21:14:14] INFO: Testing invalid date format (expecting 422 error)...
+[2025-08-21 21:14:14] INFO: Invalid date format correctly returned 422 (expected behavior)
+[2025-08-21 21:14:14] INFO: ✅ All tests passed successfully
+[2025-08-21 21:14:14] INFO: Cleaning up...
+[2025-08-21 21:14:14] INFO: Test run completed. Logs saved to: ./test-logs/20250821-211409
+Exit code: 0

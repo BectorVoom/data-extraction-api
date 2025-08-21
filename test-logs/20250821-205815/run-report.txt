@@ -1,0 +1,16 @@
+[2025-08-21 20:58:15] INFO: Starting backend server...
+[2025-08-21 20:58:15] INFO: Backend started with PID: 20418
+[2025-08-21 20:58:15] INFO: Waiting for server to start...
+[2025-08-21 20:58:20] INFO: Waiting for server... (attempt 1/10)
+[2025-08-21 20:58:22] INFO: Waiting for server... (attempt 2/10)
+[2025-08-21 20:58:24] INFO: Waiting for server... (attempt 3/10)
+[2025-08-21 20:58:26] INFO: Waiting for server... (attempt 4/10)
+[2025-08-21 20:58:28] INFO: Waiting for server... (attempt 5/10)
+[2025-08-21 20:58:30] INFO: Waiting for server... (attempt 6/10)
+[2025-08-21 20:58:32] INFO: Waiting for server... (attempt 7/10)
+[2025-08-21 20:58:34] INFO: Waiting for server... (attempt 8/10)
+[2025-08-21 20:58:36] INFO: Waiting for server... (attempt 9/10)
+[2025-08-21 20:58:38] ERROR: Server failed to start within expected time
+[2025-08-21 20:58:38] INFO: Cleaning up...
+[2025-08-21 20:58:38] INFO: Test run completed. Logs saved to: ./test-logs/20250821-205815
+Exit code: 0

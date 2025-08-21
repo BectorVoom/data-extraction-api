@@ -180,7 +180,7 @@ class TestAPIEndpoints:
         """Test query endpoint with invalid JSON."""
         response = client.post(
             "/api/query",
-            data="invalid json",
+            content="invalid json",
             headers={"Content-Type": "application/json"}
         )
         assert response.status_code == 422
@@ -189,7 +189,7 @@ class TestAPIEndpoints:
         """Test query endpoint with wrong content type."""
         response = client.post(
             "/api/query",
-            data="id=12345&fromDate=2024/01/01&toDate=2024/12/31",
+            content="id=12345&fromDate=2024/01/01&toDate=2024/12/31",
             headers={"Content-Type": "application/x-www-form-urlencoded"}
         )
         assert response.status_code == 422

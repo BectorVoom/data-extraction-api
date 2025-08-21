@@ -1,0 +1,54 @@
+[2025-08-21 21:32:41] ℹ️  INFO: 🧪 PHASE 1: Running internal unit and integration tests
+[2025-08-21 21:32:41] ℹ️  INFO: This ensures all TestClient-based tests pass before starting HTTP server
+[2025-08-21 21:32:41] ℹ️  INFO: 📦 Installing/updating dependencies with uv
+[2025-08-21 21:32:41] ℹ️  INFO: 🔍 Running comprehensive pytest suite (TestClient tests)
+[2025-08-21 21:32:43] ✅ SUCCESS: Internal tests PASSED - proceeding to HTTP server tests
+[2025-08-21 21:32:43] ℹ️  INFO: 🚀 PHASE 2: Starting real HTTP server for end-to-end testing
+[2025-08-21 21:32:43] ℹ️  INFO: Zero tolerance policy: Any HTTP 4xx/5xx response will fail the test
+[2025-08-21 21:32:43] ℹ️  INFO: Starting uvicorn server on http://localhost:8000
+[2025-08-21 21:32:43] ℹ️  INFO: Backend server started with PID: 30227
+[2025-08-21 21:32:43] ℹ️  INFO: Server logs: /Users/ods/Documents/extract_data_env/test-logs/20250821-213241/server-logs/uvicorn-server.log
+[2025-08-21 21:32:43] ℹ️  INFO: Waiting 3 seconds for server startup...
+[2025-08-21 21:32:46] ℹ️  INFO: Starting server log monitoring for 300 seconds
+[2025-08-21 21:32:46] ℹ️  INFO: Verifying server readiness with health checks
+[2025-08-21 21:32:46] ✅ SUCCESS: Server is ready and responding
+[2025-08-21 21:32:46] ℹ️  INFO: 🎯 PHASE 3: Comprehensive HTTP test suite with zero error tolerance
+[2025-08-21 21:32:46] ℹ️  INFO: Testing all endpoints with real HTTP requests (curl)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: root endpoint health check
+[2025-08-21 21:32:46] ℹ️  INFO: Making GET request to http://localhost:8000/ (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: root endpoint health check SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: API health check endpoint
+[2025-08-21 21:32:46] ℹ️  INFO: Making GET request to http://localhost:8000/api/health (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: API health check endpoint SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: API info endpoint
+[2025-08-21 21:32:46] ℹ️  INFO: Making GET request to http://localhost:8000/api/info (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: API info endpoint SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: valid query with all fields
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: valid query with all fields SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: query with ID only
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: query with ID only SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: query with environment only
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: query with environment only SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: query with date range only
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: query with date range only SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: empty query (all data)
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: empty query (all data) SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: feather endpoint with valid data
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query/feather (expecting HTTP 200)
+[2025-08-21 21:32:46] ✅ SUCCESS: feather endpoint with valid data SUCCESS (HTTP 200)
+[2025-08-21 21:32:46] ℹ️  INFO: Testing: feather endpoint all data
+[2025-08-21 21:32:46] ℹ️  INFO: Making POST request to http://localhost:8000/api/query/feather (expecting HTTP 200)
+[2025-08-21 21:32:47] ✅ SUCCESS: feather endpoint all data SUCCESS (HTTP 200)
+[2025-08-21 21:32:47] ✅ SUCCESS: 🎉 ALL HTTP TESTS PASSED WITH ZERO ERRORS!
+[2025-08-21 21:32:47] ✅ SUCCESS: ✅ System maintains strict HTTP error tolerance
+[2025-08-21 21:32:47] ✅ SUCCESS: 🚀 Production readiness confirmed
+[2025-08-21 21:32:47] ℹ️  INFO: Starting cleanup process...
+[2025-08-21 21:32:47] ℹ️  INFO: Stopping backend server (PID: 30227)
+[2025-08-21 21:32:47] ℹ️  INFO: Generating comprehensive test report...
+[2025-08-21 21:32:47] ℹ️  INFO: Test report saved to: /Users/ods/Documents/extract_data_env/test-logs/20250821-213241/reports/final-test-report.json
+[2025-08-21 21:32:47] ℹ️  INFO: Cleanup completed. Final logs saved to: /Users/ods/Documents/extract_data_env/test-logs/20250821-213241
