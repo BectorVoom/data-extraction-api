@@ -27,7 +27,6 @@
   let successMessage = '';
   let queryResults: QueryResponse | null = null;
   let showResults = false;
-  let useFeatherFormat = false;
   let featherData: any[] = [];
 
   const API_BASE_URL = 'https://localhost:8000';
@@ -104,61 +103,6 @@
   }
 
   async function executeQuery() {
-    if (useFeatherFormat) {
-      await executeFeatherQuery();
-    } else {
-      await executeJsonQuery();
-    }
-  }
-
-  async function executeJsonQuery() {
-    errorMessage = '';
-    successMessage = '';
-    isLoading = true;
-    queryResults = null;
-    showResults = false;
-    
-    let payload: QueryPayload | null = null;
-
-    try {
-      payload = validateFormData();
-      
-      const response = await fetch(`${API_BASE_URL}/api/query`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail?.error || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      queryResults = await response.json();
-      showResults = true;
-      successMessage = `Query completed successfully. Found ${queryResults?.count || 0} record(s).`;
-      
-    } catch (error) {
-      const errorMessage_ = error instanceof Error ? error.message : String(error);
-      errorMessage = errorMessage_;
-      
-      reportApiError('/api/query', error, {
-        payload: payload ? {
-          id: payload.id ? '[REDACTED]' : null,
-          fromDate: payload.fromDate,
-          toDate: payload.toDate,
-          environment: payload.environment
-        } : null,
-        useFeatherFormat: false
-      });
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function executeFeatherQuery() {
     errorMessage = '';
     successMessage = '';
     isLoading = true;
@@ -215,11 +159,11 @@
       };
 
       showResults = true;
-      successMessage = `Feather query completed successfully. Found ${rows.length} record(s). File size: ${featherBytes.byteLength} bytes.`;
+      successMessage = `Query completed successfully. Found ${rows.length} record(s). File size: ${featherBytes.byteLength} bytes.`;
       
     } catch (error) {
       const errorMessage_ = error instanceof Error ? error.message : String(error);
-      errorMessage = `Feather query failed: ${errorMessage_}`;
+      errorMessage = `Query failed: ${errorMessage_}`;
       
       reportApiError('/api/query/feather', error, {
         payload: payload ? {
@@ -227,8 +171,7 @@
           fromDate: payload.fromDate,
           toDate: payload.toDate,
           environment: payload.environment
-        } : null,
-        useFeatherFormat: true
+        } : null
       });
     } finally {
       isLoading = false;
@@ -236,7 +179,7 @@
   }
 
   async function updateExcelSheet() {
-    const dataToExport = useFeatherFormat ? featherData : queryResults?.data;
+    const dataToExport = featherData;
     
     if (!dataToExport || dataToExport.length === 0) {
       errorMessage = 'No data available to export to Excel';
@@ -287,8 +230,7 @@
         await context.sync();
         
         const recordCount = dataToExport.length;
-        const formatUsed = useFeatherFormat ? 'Feather' : 'JSON';
-        successMessage = `Successfully updated Excel sheet with ${recordCount} records (${formatUsed} format)`;
+        successMessage = `Successfully updated Excel sheet with ${recordCount} records`;
         errorMessage = '';
       });
       
@@ -310,7 +252,7 @@
       reportExcelError('update_sheet', error, {
         dataRowCount: dataToExport?.length || 0,
         columnCount: dataToExport?.length > 0 ? Object.keys(dataToExport[0]).length : 0,
-        formatUsed: useFeatherFormat ? 'feather' : 'json',
+        formatUsed: 'feather',
         officeAvailable: typeof (globalThis as any).Office !== 'undefined',
         excelAvailable: typeof (globalThis as any).Excel !== 'undefined'
       });
@@ -376,7 +318,7 @@
 <main class="max-w-4xl mx-auto p-6 space-y-6">
   <header class="text-center border-b pb-6">
     <h1 class="text-3xl font-bold text-gray-900 mb-2">Data Extraction Tool</h1>
-    <p class="text-gray-600">Query your data using JSON filters and export results to Excel</p>
+    <p class="text-gray-600">Query your data using filters and export results to Excel</p>
   </header>
 
   <!-- Quick Examples -->
@@ -391,37 +333,6 @@
     </div>
   </section>
 
-  <!-- Response Format Selection -->
-  <section class="bg-blue-50 p-4 rounded-lg">
-    <h3 class="text-lg font-medium text-blue-900 mb-3">Response Format</h3>
-    <div class="flex items-center space-x-4">
-      <label class="flex items-center">
-        <input 
-          type="radio" 
-          bind:group={useFeatherFormat} 
-          value={false} 
-          class="mr-2"
-        />
-        <span class="text-blue-800">JSON (Default)</span>
-      </label>
-      <label class="flex items-center">
-        <input 
-          type="radio" 
-          bind:group={useFeatherFormat} 
-          value={true} 
-          class="mr-2"
-        />
-        <span class="text-blue-800">Apache Arrow Feather (Optimized for Excel)</span>
-      </label>
-    </div>
-    <div class="text-xs text-blue-600 mt-2">
-      {#if useFeatherFormat}
-        📊 Feather format provides better performance and is optimized for Excel integration.
-      {:else}
-        💻 JSON format provides human-readable results and debugging information.
-      {/if}
-    </div>
-  </section>
 
   <!-- Filter Input Section -->
   <section class="space-y-4">
@@ -502,10 +413,10 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            {useFeatherFormat ? 'Fetching Feather...' : 'Querying...'}
+            Fetching Data...
           </span>
         {:else}
-          {useFeatherFormat ? 'Execute Query (Feather)' : 'Execute Query (JSON)'}
+          Execute Query
         {/if}
       </button>
       

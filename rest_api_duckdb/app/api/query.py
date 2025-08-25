@@ -1,4 +1,3 @@
-from typing import Union
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -8,7 +7,6 @@ from io import BytesIO
 
 from app.models.schemas import (
     QueryPayload, 
-    QueryResponse, 
     FeatureResponse,
     ErrorResponse,
     ValidationErrorResponse
@@ -20,8 +18,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["query"])
 
 
-@router.post("/query", response_model=Union[QueryResponse, FeatureResponse])
-async def query_data(payload: QueryPayload) -> Union[QueryResponse, FeatureResponse]:
+@router.post("/query", response_model=FeatureResponse)
+async def query_data(payload: QueryPayload) -> FeatureResponse:
     """
     Query data from DuckDB based on ID, date range, and environment.
     
@@ -29,7 +27,7 @@ async def query_data(payload: QueryPayload) -> Union[QueryResponse, FeatureRespo
         payload: Query parameters including optional id, fromDate, toDate, and environment
         
     Returns:
-        QueryResponse with matching data rows
+        FeatureResponse with matching data rows in feature format
         
     Raises:
         HTTPException: For various error conditions (400, 422, 500)
@@ -51,64 +49,41 @@ async def query_data(payload: QueryPayload) -> Union[QueryResponse, FeatureRespo
             environment=payload.environment
         )
         
-        # Prepare response based on requested format
-        if payload.format == "feature":
-            # Convert data to feature format
-            features = []
-            for row in data:
-                feature = {
-                    "type": "Feature",
-                    "id": row.get("id"),
-                    "properties": {k: v for k, v in row.items() if k != "id"},
-                    "geometry": None  # Could be extended to include spatial data
-                }
-                features.append(feature)
-            
-            metadata = {
-                "query_parameters": {
-                    "id": str(payload.id) if payload.id is not None else None,
-                    "fromDate": payload.fromDate,
-                    "toDate": payload.toDate,
-                    "environment": payload.environment
-                },
-                "generated_at": datetime.now().isoformat()
+        # Convert data to feature format
+        features = []
+        for row in data:
+            feature = {
+                "type": "Feature",
+                "id": row.get("id"),
+                "properties": {k: v for k, v in row.items() if k != "id"},
+                "geometry": None  # Could be extended to include spatial data
             }
-            
-            # Add parsed date range info if dates were provided
-            if from_date is not None or to_date is not None:
-                metadata["date_range_parsed"] = {
-                    "from": from_date.isoformat() if from_date else None,
-                    "to": to_date.isoformat() if to_date else None
-                }
-            
-            response = FeatureResponse(
-                features=features,
-                count=len(features),
-                metadata=metadata
-            )
-        else:
-            # Default JSON format
-            query_info = {
+            features.append(feature)
+        
+        metadata = {
+            "query_parameters": {
                 "id": str(payload.id) if payload.id is not None else None,
                 "fromDate": payload.fromDate,
                 "toDate": payload.toDate,
                 "environment": payload.environment
-            }
-            
-            # Add parsed date range info if dates were provided
-            if from_date is not None or to_date is not None:
-                query_info["date_range_parsed"] = {
-                    "from": from_date.isoformat() if from_date else None,
-                    "to": to_date.isoformat() if to_date else None
-                }
-            
-            response = QueryResponse(
-                data=data,
-                count=len(data),
-                query_info=query_info
-            )
+            },
+            "generated_at": datetime.now().isoformat()
+        }
         
-        logger.info(f"Query completed successfully, returned {len(data)} rows in {payload.format} format")
+        # Add parsed date range info if dates were provided
+        if from_date is not None or to_date is not None:
+            metadata["date_range_parsed"] = {
+                "from": from_date.isoformat() if from_date else None,
+                "to": to_date.isoformat() if to_date else None
+            }
+        
+        response = FeatureResponse(
+            features=features,
+            count=len(features),
+            metadata=metadata
+        )
+        
+        logger.info(f"Query completed successfully, returned {len(data)} rows in feature format")
         return response
         
     except ValidationError as e:
@@ -281,14 +256,14 @@ async def database_info():
         return {
             "database_info": table_info,
             "api_info": {
-                "json_endpoint": {
+                "feature_endpoint": {
                     "endpoint": "/api/query",
                     "method": "POST",
                     "required_fields": [],
-                    "optional_fields": ["id", "fromDate", "toDate", "environment", "format"],
+                    "optional_fields": ["id", "fromDate", "toDate", "environment"],
                     "date_format": "yyyy/mm/dd",
-                    "response_format": "JSON",
-                    "notes": "All fields are optional. Null values create unbounded queries."
+                    "response_format": "GeoJSON Feature Collection",
+                    "notes": "All fields are optional. Returns data in GeoJSON feature format. Null values create unbounded queries."
                 },
                 "feather_endpoint": {
                     "endpoint": "/api/query/feather",
@@ -327,14 +302,6 @@ async def database_info():
                         }
                     },
                     {
-                        "description": "Query with feature file format",
-                        "payload": {
-                            "id": "12345",
-                            "environment": "production",
-                            "format": "feature"
-                        }
-                    },
-                    {
                         "description": "Query for Feather file (use /api/query/feather endpoint)",
                         "payload": {
                             "id": "12345",
@@ -342,7 +309,7 @@ async def database_info():
                             "toDate": "2024/12/31",
                             "environment": "production"
                         },
-                        "notes": "Returns Apache Arrow Feather file instead of JSON"
+                        "notes": "Returns Apache Arrow Feather file instead of GeoJSON features"
                     }
                 ]
             }
