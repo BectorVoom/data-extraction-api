@@ -126,13 +126,13 @@ async def query_data(payload: QueryPayload) -> FeatureResponse:
 @router.post("/query/feather")
 async def query_data_feather(payload: QueryPayload) -> StreamingResponse:
     """
-    Query data from DuckDB and return as Apache Arrow Feather file.
+    Query data from DuckDB and return results in Apache Arrow Feather format.
     
     Args:
         payload: Query parameters including optional id, fromDate, toDate, and environment
         
     Returns:
-        StreamingResponse with Feather file content
+        StreamingResponse containing Feather binary data
         
     Raises:
         HTTPException: For various error conditions (400, 422, 500)
@@ -154,37 +154,22 @@ async def query_data_feather(payload: QueryPayload) -> StreamingResponse:
             environment=payload.environment
         )
         
-        # Generate a filename based on query parameters
-        filename_parts = []
-        if payload.id is not None:
-            filename_parts.append(f"id_{payload.id}")
-        if payload.fromDate:
-            filename_parts.append(f"from_{payload.fromDate.replace('/', '_')}")
-        if payload.toDate:
-            filename_parts.append(f"to_{payload.toDate.replace('/', '_')}")
-        if payload.environment:
-            filename_parts.append(f"env_{payload.environment}")
+        logger.info(f"Feather query completed successfully, returned {len(feather_bytes)} bytes")
         
-        filename = "_".join(filename_parts) if filename_parts else "data"
-        filename = f"query_results_{filename}.feather"
-        
-        logger.info(f"Feather query completed successfully, returning {len(feather_bytes)} bytes as {filename}")
-        
-        # Create streaming response with Feather content
-        feather_stream = BytesIO(feather_bytes)
-        
+        # Return Feather file as binary response
         return StreamingResponse(
-            feather_stream,
-            media_type="application/octet-stream",
+            BytesIO(feather_bytes),
+            media_type="application/vnd.apache.arrow.file",
             headers={
-                "Content-Disposition": f"attachment; filename={filename}",
-                "Content-Type": "application/octet-stream",
-                "Access-Control-Expose-Headers": "Content-Disposition"
+                "Content-Disposition": "attachment; filename=query_result.feather",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
             }
         )
         
     except ValidationError as e:
-        logger.warning(f"Validation error in Feather endpoint: {e}")
+        logger.warning(f"Validation error: {e}")
         error_response = ValidationErrorResponse(
             error="Validation failed",
             validation_errors=[{"field": err["loc"], "message": err["msg"]} for err in e.errors()],
@@ -196,7 +181,7 @@ async def query_data_feather(payload: QueryPayload) -> StreamingResponse:
         )
         
     except ValueError as e:
-        logger.warning(f"Value error in Feather endpoint: {e}")
+        logger.warning(f"Value error: {e}")
         error_response = ErrorResponse(
             error="Invalid input data",
             details=str(e),
@@ -211,7 +196,7 @@ async def query_data_feather(payload: QueryPayload) -> StreamingResponse:
         logger.error(f"Unexpected error during Feather query: {e}", exc_info=True)
         error_response = ErrorResponse(
             error="Internal server error",
-            details="An unexpected error occurred while processing the Feather request",
+            details="An unexpected error occurred while processing the request",
             status_code=500
         )
         raise HTTPException(
