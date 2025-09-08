@@ -46,11 +46,11 @@ class DatabaseService:
         # Create data directory if it doesn't exist
         os.makedirs(os.path.dirname(parquet_file_path), exist_ok=True)
         
-        # Sample data with environment values
+        # Sample data with Japanese column names
         data = {
-            'id': ['12345', '12345', '12345', '67890', '67890', '67890', 
+            '伝票番号': ['12345', '12345', '12345', '67890', '67890', '67890', 
                    '11111', '11111', '22222', '22222', '33333', '33333'],
-            'event_date': ['2024-01-15', '2024-02-20', '2024-03-10', '2024-01-20', 
+            '購買日': ['2024-01-15', '2024-02-20', '2024-03-10', '2024-01-20', 
                           '2024-02-25', '2024-04-15', '2024-05-01', '2024-05-02',
                           '2023-12-15', '2024-01-01', '2024-06-01', '2024-06-02'],
             'event_type': ['login', 'purchase', 'logout', 'login', 'view', 'purchase',
@@ -66,7 +66,7 @@ class DatabaseService:
         
         # Create DataFrame and convert date column
         df = pd.DataFrame(data)
-        df['event_date'] = pd.to_datetime(df['event_date']).dt.date
+        df['購買日'] = pd.to_datetime(df['購買日']).dt.date
         df['created_at'] = pd.Timestamp.now()
         
         # Save to Parquet
@@ -92,7 +92,7 @@ class DatabaseService:
             """)
             
             # Create indexes for better performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_id_date ON events(id, event_date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_id_date ON events(伝票番号, 購買日)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_events_environment ON events(environment)")
             
             # Get row count for logging
@@ -113,11 +113,11 @@ class DatabaseService:
         conn = self.get_connection()
         
         try:
-            # Create a sample events table with environment field
+            # Create a sample events table with Japanese column names
             conn.execute("""
                 CREATE OR REPLACE TABLE events (
-                    id VARCHAR,
-                    event_date DATE,
+                    伝票番号 VARCHAR,
+                    購買日 DATE,
                     event_type VARCHAR,
                     description VARCHAR,
                     value DOUBLE,
@@ -126,7 +126,7 @@ class DatabaseService:
                 )
             """)
             
-            # Insert sample data with environment values
+            # Insert sample data with Japanese column names
             sample_data = [
                 ('12345', '2024-01-15', 'login', 'User login event', 1.0, 'production'),
                 ('12345', '2024-02-20', 'purchase', 'Product purchase', 99.99, 'production'),
@@ -143,12 +143,12 @@ class DatabaseService:
             ]
             
             conn.executemany(
-                "INSERT INTO events (id, event_date, event_type, description, value, environment) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO events (伝票番号, 購買日, event_type, description, value, environment) VALUES (?, ?, ?, ?, ?, ?)",
                 sample_data
             )
             
             # Create indexes for better performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_id_date ON events(id, event_date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_id_date ON events(伝票番号, 購買日)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_events_environment ON events(environment)")
             
             logger.info("Sample data initialized successfully")
@@ -181,92 +181,7 @@ class DatabaseService:
             logger.error(f"Failed to export to Parquet file: {e}")
             raise
     
-    def query_events(self, id_filter: Optional[str], from_date: Optional[date], to_date: Optional[date], environment: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Query events based on id, date range, and environment.
-        
-        Args:
-            id_filter: ID to filter events (optional, unbounded if None)
-            from_date: Start date (inclusive, unbounded if None)
-            to_date: End date (inclusive, unbounded if None)
-            environment: Environment to filter events (optional)
-            
-        Returns:
-            List of matching event records
-        """
-        conn = self.get_connection()
-        
-        try:
-            # Build dynamic query based on provided filters
-            where_conditions = []
-            params = []
-            
-            if id_filter is not None:
-                where_conditions.append("id = ?")
-                params.append(str(id_filter))
-            
-            if from_date is not None:
-                where_conditions.append("event_date >= ?")
-                params.append(from_date)
-                
-            if to_date is not None:
-                where_conditions.append("event_date <= ?")
-                params.append(to_date)
-                
-            if environment is not None:
-                where_conditions.append("environment = ?")
-                params.append(environment)
-            
-            # Build the WHERE clause
-            where_clause = ""
-            if where_conditions:
-                where_clause = "WHERE " + " AND ".join(where_conditions)
-            
-            sql = f"""
-                SELECT 
-                    id,
-                    event_date,
-                    event_type,
-                    description,
-                    value,
-                    environment,
-                    created_at
-                FROM events 
-                {where_clause}
-                ORDER BY event_date ASC, created_at ASC
-            """
-            
-            logger.info(f"Executing query for id={id_filter}, from_date={from_date}, to_date={to_date}, environment={environment}")
-            logger.debug(f"SQL: {sql}")
-            logger.debug(f"Parameters: {params}")
-            
-            # Execute the parameterized query
-            result = conn.execute(sql, params)
-            
-            # Fetch all results
-            rows = result.fetchall()
-            columns = [desc[0] for desc in result.description]
-            
-            # Convert to list of dictionaries
-            data = []
-            for row in rows:
-                row_dict = {}
-                for i, value in enumerate(row):
-                    # Handle date serialization
-                    if isinstance(value, date):
-                        row_dict[columns[i]] = value.isoformat()
-                    elif hasattr(value, 'isoformat'):  # datetime objects
-                        row_dict[columns[i]] = value.isoformat()
-                    else:
-                        row_dict[columns[i]] = value
-                data.append(row_dict)
-            
-            logger.info(f"Query returned {len(data)} rows")
-            return data
-            
-        except Exception as e:
-            logger.error(f"Query execution failed: {e}")
-            raise
+ 
     
     def query_events_to_feather(self, id_filter: Optional[str], from_date: Optional[date], to_date: Optional[date], environment: Optional[str] = None) -> bytes:
         """
@@ -293,15 +208,15 @@ class DatabaseService:
             params = []
             
             if id_filter is not None:
-                where_conditions.append("id = ?")
+                where_conditions.append("伝票番号 = ?")
                 params.append(str(id_filter))
             
             if from_date is not None:
-                where_conditions.append("event_date >= ?")
+                where_conditions.append("購買日 >= ?")
                 params.append(from_date)
                 
             if to_date is not None:
-                where_conditions.append("event_date <= ?")
+                where_conditions.append("購買日 <= ?")
                 params.append(to_date)
                 
             if environment is not None:
@@ -315,8 +230,8 @@ class DatabaseService:
             
             sql = f"""
                 SELECT 
-                    id,
-                    event_date,
+                    伝票番号,
+                    購買日,
                     event_type,
                     description,
                     value,
@@ -324,7 +239,7 @@ class DatabaseService:
                     created_at
                 FROM events 
                 {where_clause}
-                ORDER BY event_date ASC, created_at ASC
+                ORDER BY 購買日 ASC, created_at ASC
             """
             
             logger.info(f"Executing Feather query for id={id_filter}, from_date={from_date}, to_date={to_date}, environment={environment}")
@@ -350,6 +265,80 @@ class DatabaseService:
             logger.error(f"Feather query execution failed: {e}")
             raise
     
+    def query_events(self, id_filter: Optional[str], from_date: Optional[date], to_date: Optional[date], environment: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Query events and return results as list of dictionaries.
+        
+        Args:
+            id_filter: ID to filter events (optional, unbounded if None)
+            from_date: Start date (inclusive, unbounded if None)
+            to_date: End date (inclusive, unbounded if None)  
+            environment: Environment to filter events (optional)
+            
+        Returns:
+            List of dictionaries representing matching rows
+        """
+        conn = self.get_connection()
+        
+        try:
+            # Build dynamic query based on provided filters
+            where_conditions = []
+            params = []
+            
+            if id_filter is not None:
+                where_conditions.append("伝票番号 = ?")
+                params.append(str(id_filter))
+            
+            if from_date is not None:
+                where_conditions.append("購買日 >= ?")
+                params.append(from_date)
+                
+            if to_date is not None:
+                where_conditions.append("購買日 <= ?")
+                params.append(to_date)
+                
+            if environment is not None:
+                where_conditions.append("environment = ?")
+                params.append(environment)
+            
+            # Build the WHERE clause
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions)
+            
+            sql = f"""
+                SELECT 
+                    伝票番号,
+                    購買日,
+                    event_type,
+                    description,
+                    value,
+                    environment,
+                    created_at
+                FROM events 
+                {where_clause}
+                ORDER BY 購買日 ASC, created_at ASC
+            """
+            
+            logger.info(f"Executing query for id={id_filter}, from_date={from_date}, to_date={to_date}, environment={environment}")
+            logger.debug(f"SQL: {sql}")
+            logger.debug(f"Parameters: {params}")
+            
+            # Execute the parameterized query
+            result = conn.execute(sql, params)
+            rows = result.fetchall()
+            
+            # Convert to list of dictionaries
+            columns = [desc[0] for desc in result.description]
+            data = [dict(zip(columns, row)) for row in rows]
+            
+            logger.info(f"Query completed successfully, returned {len(data)} rows")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Query execution failed: {e}")
+            raise
+    
     def get_table_info(self) -> Dict[str, Any]:
         """Get information about the events table."""
         conn = self.get_connection()
@@ -364,12 +353,12 @@ class DatabaseService:
             row_count = count_result[0] if count_result else 0
             
             # Get unique IDs
-            ids_result = conn.execute("SELECT DISTINCT id FROM events ORDER BY id").fetchall()
+            ids_result = conn.execute("SELECT DISTINCT 伝票番号 FROM events ORDER BY 伝票番号").fetchall()
             unique_ids = [row[0] for row in ids_result]
             
             # Get date range
             date_range_result = conn.execute(
-                "SELECT MIN(event_date), MAX(event_date) FROM events"
+                "SELECT MIN(購買日), MAX(購買日) FROM events"
             ).fetchone()
             
             min_date = date_range_result[0].isoformat() if date_range_result[0] else None
