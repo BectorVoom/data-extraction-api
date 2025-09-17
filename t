@@ -1,300 +1,324 @@
-// ExcelDataWriter.ts
-import * as arrow from 'apache-arrow';
+#!/usr/bin/env python3
+"""
+Functional Polars-based tagging pipeline that assigns tags to DataFrame rows
+by matching text against regex patterns from a CSV file.
 
-interface ColumnInfo {
-  name: string;
-  type: 'date' | 'string';
-  index: number;
-}
+Implements functional programming principles with pure functions and immutable transformations.
+"""
 
-class ExcelDataWriter {
-  private readonly BATCH_SIZE = 10000; // バッチサイズ（行数）
-  private readonly MAX_CELLS_PER_UPDATE = 100000; // 1回の更新での最大セル数
+import re
+import sys
+from pathlib import Path
+from typing import Dict, List, Pattern
+import polars as pl
 
-  /**
-   * Featherファイルからデータを読み込みExcelに書き込む
-   */
-  async writeFeatherToExcel(
-    featherData: ArrayBuffer,
-    startCell: string = "A1"
-  ): Promise<void> {
-    try {
-      // Apache Arrowテーブルの読み込み
-      const table = arrow.tableFromIPC(featherData);
-      
-      await Excel.run(async (context) => {
-        const sheet = context.workbook.worksheets.getActiveWorksheet();
+
+def load_patterns(csv_path: str) -> pl.DataFrame:
+    """
+    Load tag patterns from CSV file with comprehensive error handling.
+    
+    Args:
+        csv_path: Path to the patterns CSV file
         
-        // 列情報の取得
-        const columnInfo = this.getColumnInfo(table);
+    Returns:
+        DataFrame with 'tag' and 'pattern' columns
         
-        // ヘッダーの書き込み
-        await this.writeHeaders(sheet, columnInfo, startCell, context);
+    Raises:
+        FileNotFoundError: If CSV file doesn't exist
+        Exception: For other CSV reading errors
+    """
+    try:
+        if not Path(csv_path).exists():
+            raise FileNotFoundError(f"Patterns file not found: {csv_path}")
         
-        // データの書き込み（バッチ処理）
-        await this.writeDataInBatches(sheet, table, columnInfo, startCell, context);
+        df = pl.read_csv(csv_path)
         
-        console.log(`データ書き込み完了: ${table.numRows}行 × ${table.numCols}列`);
-      });
-    } catch (error) {
-      console.error("データ書き込みエラー:", error);
-      throw error;
+        # Validate required columns
+        required_cols = {'tag', 'pattern'}
+        if not required_cols.issubset(set(df.columns)):
+            raise ValueError(f"CSV must contain columns: {required_cols}")
+        
+        # Filter out empty patterns
+        df = df.filter(pl.col('pattern').is_not_null() & (pl.col('pattern') != ''))
+        
+        print(f"✅ Loaded {len(df)} patterns from {csv_path}")
+        return df
+        
+    except Exception as e:
+        print(f"❌ Error loading patterns from {csv_path}: {e}")
+        raise
+
+
+def compile_patterns_by_tag(patterns_df: pl.DataFrame) -> Dict[str, List[Pattern[str]]]:
+    """
+    Compile regex patterns grouped by tag with Unicode support and error handling.
+    
+    Args:
+        patterns_df: DataFrame with 'tag' and 'pattern' columns
+        
+    Returns:
+        Dictionary mapping tag names to lists of compiled regex patterns
+    """
+    compiled_patterns: Dict[str, List[Pattern[str]]] = {}
+    compilation_errors: List[str] = []
+    
+    # Group patterns by tag and compile them
+    for row in patterns_df.iter_rows(named=True):
+        tag = row['tag']
+        pattern_str = row['pattern']
+        
+        try:
+            # Unicode-aware regex compilation for Japanese text support
+            compiled_pattern = re.compile(pattern_str, re.UNICODE | re.DOTALL)
+            
+            if tag not in compiled_patterns:
+                compiled_patterns[tag] = []
+            compiled_patterns[tag].append(compiled_pattern)
+            
+        except re.error as e:
+            error_msg = f"Invalid regex pattern '{pattern_str}' for tag '{tag}': {e}"
+            compilation_errors.append(error_msg)
+            print(f"⚠️  {error_msg}")
+    
+    if compilation_errors:
+        print(f"⚠️  {len(compilation_errors)} regex compilation errors occurred")
+        for error in compilation_errors:
+            print(f"   - {error}")
+    
+    print(f"✅ Compiled patterns for {len(compiled_patterns)} tags")
+    return compiled_patterns
+
+
+def create_sample_data() -> pl.DataFrame:
+    """
+    Create sample DataFrame with test cases for all required pattern types.
+    
+    Returns:
+        DataFrame with 'text' column containing test cases
+    """
+    # Sample data covering all required patterns plus negative examples
+    sample_texts = [
+        # SK30 pattern matches
+        "申請書類はSK30を参考にしてください",
+        "SK30の提出が必要です",
+        
+        # 就職.*(前|活動|活動中) pattern matches  
+        "就職の前に準備が大切です",
+        "就職活動を始めました",
+        "現在就職活動中です",
+        "就職に向けて活動しています",
+        
+        # 就職.*時 pattern matches
+        "就職時の注意点について",
+        "就職した時のことを考える",
+        
+        # S\d{3} pattern matches (S followed by exactly 3 digits)
+        "申請コードS123で処理します",
+        "S456の案件について", 
+        "S789を確認してください",
+        
+        # Multiple matches (should get multiple tags)
+        "就職前の準備とSK30について", # Should match both 就活前 patterns
+        "S999の就職活動について",      # Should match both 就活前 patterns
+        
+        # Additional tag matches (内定後, 技術)
+        "内定後の手続きについて",
+        "採用後のフォローアップ",
+        "プログラミングスキルが必要",
+        "エンジニアとして開発業務",
+        
+        # Negative examples (should not match any pattern)
+        "一般的な情報です",
+        "特に関係のない文章",
+        "S12は短すぎる", # S followed by only 2 digits
+        "SK29は違う番号", # SK29 not SK30
+        "就職以外の話題", # 就職 but no matching suffix
+    ]
+    
+    df = pl.DataFrame({"text": sample_texts})
+    print(f"✅ Created sample DataFrame with {len(df)} test cases")
+    return df
+
+
+def apply_tag_matching(text_df: pl.DataFrame, compiled_patterns: Dict[str, List[Pattern[str]]]) -> pl.DataFrame:
+    """
+    Apply tag matching to text DataFrame using functional approach.
+    
+    Args:
+        text_df: DataFrame with 'text' column
+        compiled_patterns: Dictionary of compiled regex patterns by tag
+        
+    Returns:
+        DataFrame with additional 'tags' column containing list of matched tags
+    """
+    def match_text_to_tags(text: str) -> List[str]:
+        """Pure function to match a single text against all patterns."""
+        matched_tags = []
+        
+        for tag, patterns in compiled_patterns.items():
+            # If any pattern for this tag matches, add the tag
+            if any(pattern.search(text) for pattern in patterns):
+                matched_tags.append(tag)
+        
+        return matched_tags
+    
+    # Apply tag matching using Polars' functional API
+    result_df = text_df.with_columns([
+        pl.col("text").map_elements(
+            match_text_to_tags,
+            return_dtype=pl.List(pl.Utf8)
+        ).alias("tags")
+    ])
+    
+    print(f"✅ Applied tag matching to {len(result_df)} rows")
+    return result_df
+
+
+def create_expected_test_results() -> Dict[str, List[str]]:
+    """
+    Define expected tag assignments for validation.
+    
+    Returns:
+        Dictionary mapping text patterns to expected tag lists
+    """
+    return {
+        # SK30 matches
+        "申請書類はSK30を参考にしてください": ["就活前"],
+        "SK30の提出が必要です": ["就活前"],
+        
+        # 就職.*(前|活動|活動中) matches
+        "就職の前に準備が大切です": ["就活前"],
+        "就職活動を始めました": ["就活前"],
+        "現在就職活動中です": ["就活前"],
+        "就職に向けて活動しています": ["就活前"],
+        
+        # 就職.*時 matches
+        "就職時の注意点について": ["就活前"],
+        "就職した時のことを考える": ["就活前"],
+        
+        # S\d{3} matches
+        "申請コードS123で処理します": ["就活前"],
+        "S456の案件について": ["就活前"],
+        "S789を確認してください": ["就活前"],
+        
+        # Multiple matches
+        "就職前の準備とSK30について": ["就活前"],  # Multiple patterns, same tag
+        "S999の就職活動について": ["就活前"],      # Multiple patterns, same tag
+        
+        # Other tag matches
+        "内定後の手続きについて": ["内定後"],
+        "採用後のフォローアップ": ["内定後"],
+        "プログラミングスキルが必要": ["技術"],
+        "エンジニアとして開発業務": ["技術"],
+        
+        # Negative examples
+        "一般的な情報です": [],
+        "特に関係のない文章": [],
+        "S12は短すぎる": [],
+        "SK29は違う番号": [],
+        "就職以外の話題": [],
     }
-  }
 
-  /**
-   * 列情報を取得
-   */
-  private getColumnInfo(table: arrow.Table): ColumnInfo[] {
-    const columns: ColumnInfo[] = [];
-    
-    table.schema.fields.forEach((field, index) => {
-      let type: 'date' | 'string' = 'string';
-      
-      // データ型の判定
-      if (field.type instanceof arrow.DateDay || 
-          field.type instanceof arrow.DateMillisecond ||
-          field.type instanceof arrow.TimestampSecond ||
-          field.type instanceof arrow.TimestampMillisecond) {
-        type = 'date';
-      }
-      
-      columns.push({
-        name: field.name,
-        type: type,
-        index: index
-      });
-    });
-    
-    return columns;
-  }
 
-  /**
-   * ヘッダーの書き込み
-   */
-  private async writeHeaders(
-    sheet: Excel.Worksheet,
-    columnInfo: ColumnInfo[],
-    startCell: string,
-    context: Excel.RequestContext
-  ): Promise<void> {
-    const headers = columnInfo.map(col => col.name);
-    const headerRange = sheet.getRange(startCell).getResizedRange(0, headers.length - 1);
-    headerRange.values = [headers];
+def validate_results(result_df: pl.DataFrame) -> bool:
+    """
+    Validate tagging results against expected outcomes.
     
-    // ヘッダーのフォーマット
-    headerRange.format.font.bold = true;
-    headerRange.format.fill.color = "#E8E8E8";
-    
-    await context.sync();
-  }
-
-  /**
-   * データをバッチで書き込み
-   */
-  private async writeDataInBatches(
-    sheet: Excel.Worksheet,
-    table: arrow.Table,
-    columnInfo: ColumnInfo[],
-    startCell: string,
-    context: Excel.RequestContext
-  ): Promise<void> {
-    const totalRows = table.numRows;
-    const totalCols = table.numCols;
-    const startRow = this.getCellRow(startCell) + 1; // ヘッダーの次の行から
-    const startCol = this.getCellColumn(startCell);
-    
-    // 列ごとにバッチ処理を行う（メモリ効率を考慮）
-    const colBatchSize = Math.floor(this.MAX_CELLS_PER_UPDATE / this.BATCH_SIZE);
-    
-    for (let colStart = 0; colStart < totalCols; colStart += colBatchSize) {
-      const colEnd = Math.min(colStart + colBatchSize, totalCols);
-      
-      for (let rowStart = 0; rowStart < totalRows; rowStart += this.BATCH_SIZE) {
-        const rowEnd = Math.min(rowStart + this.BATCH_SIZE, totalRows);
-        const batchData = this.extractBatchData(
-          table, 
-          rowStart, 
-          rowEnd, 
-          colStart, 
-          colEnd, 
-          columnInfo
-        );
+    Args:
+        result_df: DataFrame with 'text' and 'tags' columns
         
-        // Rangeの取得と値の設定
-        const range = sheet.getRangeByIndexes(
-          startRow + rowStart,
-          startCol + colStart,
-          rowEnd - rowStart,
-          colEnd - colStart
-        );
+    Returns:
+        True if all validations pass, False otherwise
+    """
+    expected_results = create_expected_test_results()
+    validation_errors = []
+    
+    print("\n🔍 Running validation tests...")
+    
+    for row in result_df.iter_rows(named=True):
+        text = row['text']
+        actual_tags = sorted(row['tags']) if row['tags'] else []
+        expected_tags = sorted(expected_results.get(text, []))
         
-        range.values = batchData;
+        if actual_tags != expected_tags:
+            validation_errors.append({
+                'text': text,
+                'expected': expected_tags,
+                'actual': actual_tags
+            })
+    
+    if validation_errors:
+        print(f"❌ {len(validation_errors)} validation errors found:")
+        for error in validation_errors:
+            print(f"   Text: '{error['text'][:50]}{'...' if len(error['text']) > 50 else ''}'")
+            print(f"   Expected: {error['expected']}")
+            print(f"   Actual: {error['actual']}")
+        return False
+    else:
+        print(f"✅ All {len(result_df)} test cases passed validation")
+        return True
+
+
+def run_pipeline() -> bool:
+    """
+    Execute the complete functional tagging pipeline.
+    
+    Returns:
+        True if pipeline completes successfully with all tests passing
+    """
+    try:
+        print("🚀 Starting Functional Polars Tagging Pipeline\n")
         
-        // 日付列のフォーマット設定
-        this.formatDateColumns(range, columnInfo, colStart, colEnd);
+        # Step 1: Load and display patterns
+        print("📋 Step 1: Loading tag patterns...")
+        patterns_df = load_patterns("patterns.csv")
+        print("\n📋 Patterns CSV contents:")
+        print(patterns_df)
         
-        // 定期的に同期（メモリ解放のため）
-        if ((rowStart / this.BATCH_SIZE) % 5 === 0) {
-          await context.sync();
-          console.log(`進捗: ${rowStart + this.BATCH_SIZE}/${totalRows} 行処理完了`);
-        }
-      }
-    }
-    
-    await context.sync();
-  }
-
-  /**
-   * バッチデータの抽出
-   */
-  private extractBatchData(
-    table: arrow.Table,
-    rowStart: number,
-    rowEnd: number,
-    colStart: number,
-    colEnd: number,
-    columnInfo: ColumnInfo[]
-  ): any[][] {
-    const batchData: any[][] = [];
-    
-    for (let i = rowStart; i < rowEnd; i++) {
-      const row: any[] = [];
-      
-      for (let j = colStart; j < colEnd; j++) {
-        const column = table.getChildAt(j);
-        const value = column?.get(i);
+        # Step 2: Compile patterns by tag
+        print(f"\n⚙️  Step 2: Compiling regex patterns...")
+        compiled_patterns = compile_patterns_by_tag(patterns_df)
         
-        if (columnInfo[j].type === 'date' && value != null) {
-          // 日付型の変換
-          row.push(this.convertToExcelDate(value));
-        } else {
-          // 文字列型または null
-          row.push(value ?? "");
-        }
-      }
-      
-      batchData.push(row);
-    }
-    
-    return batchData;
-  }
+        # Step 3: Create sample data
+        print(f"\n📊 Step 3: Creating sample input data...")
+        sample_df = create_sample_data()
+        print("\n📊 Sample input DataFrame:")
+        print(sample_df)
+        
+        # Step 4: Apply tag matching
+        print(f"\n🏷️  Step 4: Applying tag matching...")
+        result_df = apply_tag_matching(sample_df, compiled_patterns)
+        print("\n🏷️  Results with tags:")
+        print(result_df)
+        
+        # Step 5: Validate results
+        print(f"\n✅ Step 5: Validating results...")
+        validation_passed = validate_results(result_df)
+        
+        if validation_passed:
+            print(f"\n🎉 ALL TESTS PASSED - Pipeline completed successfully!")
+            return True
+        else:
+            print(f"\n❌ Some tests failed - Please check implementation")
+            return False
+            
+    except Exception as e:
+        print(f"\n💥 Pipeline failed with error: {e}")
+        return False
 
-  /**
-   * 日付をExcel形式に変換
-   */
-  private convertToExcelDate(value: any): number {
-    let date: Date;
-    
-    if (value instanceof Date) {
-      date = value;
-    } else if (typeof value === 'number') {
-      date = new Date(value);
-    } else {
-      date = new Date(value.toString());
-    }
-    
-    // ExcelのシリアルDate形式に変換
-    const excelEpoch = new Date(1900, 0, 1);
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const excelDate = (date.getTime() - excelEpoch.getTime()) / msPerDay + 2;
-    
-    return excelDate;
-  }
 
-  /**
-   * 日付列のフォーマット設定
-   */
-  private formatDateColumns(
-    range: Excel.Range,
-    columnInfo: ColumnInfo[],
-    colStart: number,
-    colEnd: number
-  ): void {
-    for (let i = colStart; i < colEnd; i++) {
-      if (columnInfo[i].type === 'date') {
-        const colIndex = i - colStart;
-        const dateColumn = range.getColumn(colIndex);
-        dateColumn.numberFormat = "yyyy/mm/dd";
-      }
-    }
-  }
+def main():
+    """Main entry point with error handling."""
+    try:
+        success = run_pipeline()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        print("\n⚡ Pipeline interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n💥 Unexpected error: {e}")
+        sys.exit(1)
 
-  /**
-   * セルアドレスから行番号を取得
-   */
-  private getCellRow(cellAddress: string): number {
-    const match = cellAddress.match(/\d+/);
-    return match ? parseInt(match[0]) - 1 : 0;
-  }
 
-  /**
-   * セルアドレスから列番号を取得
-   */
-  private getCellColumn(cellAddress: string): number {
-    const match = cellAddress.match(/[A-Z]+/);
-    if (!match) return 0;
-    
-    let column = 0;
-    const letters = match[0];
-    
-    for (let i = 0; i < letters.length; i++) {
-      column = column * 26 + (letters.charCodeAt(i) - 64);
-    }
-    
-    return column - 1;
-  }
-}
-
-/**
- * 使用例
- */
-async function loadFeatherData(): Promise<void> {
-  try {
-    // バックエンドからFeatherデータを取得
-    const response = await fetch('/api/data/export', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/octet-stream'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    // ArrayBufferとして取得
-    const featherData = await response.arrayBuffer();
-    
-    // ExcelDataWriterのインスタンス作成
-    const writer = new ExcelDataWriter();
-    
-    // データの書き込み
-    await writer.writeFeatherToExcel(featherData, "A1");
-    
-    // 完了通知
-    await Excel.run(async (context) => {
-      const sheet = context.workbook.worksheets.getActiveWorksheet();
-      sheet.activate();
-      await context.sync();
-    });
-    
-    console.log("データのインポートが完了しました");
-    
-  } catch (error) {
-    console.error("データ読み込みエラー:", error);
-    // エラーをユーザーに通知
-    Office.context.ui.displayDialogAsync(
-      'error.html?message=' + encodeURIComponent(error.message),
-      { height: 30, width: 20 }
-    );
-  }
-}
-
-// Office.jsの初期化後に実行
-Office.onReady((info) => {
-  if (info.host === Office.HostType.Excel) {
-    // ボタンクリックイベントなどでloadFeatherData()を呼び出す
-    document.getElementById("importButton")?.addEventListener("click", loadFeatherData);
-  }
-});
+if __name__ == "__main__":
+    main()
